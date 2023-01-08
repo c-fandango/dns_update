@@ -51,6 +51,7 @@ log_path= config['log']['path']
 token = config['api_token']
 zone_name = config['zone_name']
 domain_name = config['domain_name']
+dns_url = config['base_url']
 
 # create logger
 logging.basicConfig(filename=log_path, format='%(asctime)s %(message)s',filemode='a')
@@ -67,7 +68,6 @@ else:
 logger.info('starting')
 
 dns_headers = {'Authorization': f'Bearer {token}'}
-dns_url = 'https://api.cloudflare.com/client/v4/zones/'
 
 zone = get_object_id(dns_url, dns_headers, zone_name)
 
