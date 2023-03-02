@@ -45,7 +45,7 @@ def update_dns(request_url, request_headers, new_ip):
             logger.info('updated')
             return True
         else:
-            raise Exception('query unsucessful')
+            logger.error('query unsucessful')
     except Exception:
         logger.exception('error updating cloudflare logs')
     return False
