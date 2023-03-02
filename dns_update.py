@@ -1,11 +1,17 @@
 '''script to change cloudflare dns record upon change to public ip of rpi'''
 import json
-import logging
-import traceback
-from time import sleep
 import yaml
+import logging
 import requests
+import argparse
+from time import sleep
 
+def load_config(path):
+
+    with open (path, 'r', encoding = 'utf-8') as file:
+        config = yaml.safe_load(file)
+
+    return config
 
 def get_ip():
     '''queries url to obtain current public ip address'''
@@ -65,9 +71,12 @@ def run( zone_name, domain_name, api_url, token):
             logger.info('not updating record')
             sleep(30)
 
-# read config
-with open ('./dns_update.yaml', 'r', encoding = 'utf-8') as file:
-    config = yaml.safe_load(file)
+# parse args 
+parser = argparse.ArgumentParser(description = 'service for updating dns records when public ip changes')
+parser.add_argument('config_path')
+args = parser.parse_args()
+
+config = load_config(args.config_path)
 
 log_level = config['log']['level']
 
