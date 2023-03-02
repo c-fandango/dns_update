@@ -1,22 +1,25 @@
-import requests
+'''script to change cloudflare dns record upon change to public ip of rpi'''
 import json
 import logging
-import yaml
+import traceback
 from time import sleep
+import yaml
+import requests
 
 
 def get_ip():
-    while True:
-        try:
-            ip = requests.get('http://ip.42.pl/raw').text
-            logger.debug(f'current_ip: {current_ip}')
-            return ip
-        except Exception:
-            logger.exception('ip scrape error')
-            sleep(30)
+    '''queries url to obtain current public ip address'''
+    try:
+        ip_address = requests.get('http://icanhazip.com').text
+        logger.debug('ip: {%s}', ip_address)
+        return ip_address
+    except Exception:
+        logger.exception('ip scrape error')
+
+    return ''
 
 def get_object_id(request_url, request_headers, name):
-
+    '''gets cloudflare zone id from zone name'''
     result = requests.get(request_url, headers = request_headers).text
     result = json.loads(result)
 
@@ -25,36 +28,51 @@ def get_object_id(request_url, request_headers, name):
     return object_id[0]
 
 def update_dns(request_url, request_headers, new_ip):
-    
+    '''send request to cloudflare with api to update record with new IP'''
+
     request_params = {'content': new_ip}
 
-    while True:
-        try:
-            result = requests.patch(request_url, json = request_params, headers = request_headers).text
-            result = json.loads(result)
-            logger.info(result)
-            if result['success']:
-                logger.info('updated')
-                return 
-        except Exception:
-            logger.exception('error updating cloudflare logs')
+    try:
+        result = requests.patch(request_url, json = request_params, headers = request_headers).text
+        result = json.loads(result)
+        if result['success']:
+            logger.info('updated')
+            return True
+        else:
+            raise Exception('query unsucessful')
+    except Exception:
+        logger.exception('error updating cloudflare logs')
+    return False
 
-        sleep(20)
+def run( zone_name, domain_name, api_url, token):
+    '''main code control loop'''
+    dns_headers = {'Authorization': f'Bearer {token}'}
+
+    zone = get_object_id(api_url, dns_headers, zone_name)
+
+    api_url += f'{zone}/dns_records/'
+    api_url += get_object_id(api_url, dns_headers, domain_name)
+
+    stored_ip = None
+
+    while True:
+        current_ip = get_ip()
+
+        if current_ip != stored_ip and update_dns(api_url, dns_headers, current_ip):
+            stored_ip = current_ip
+            assert current_ip, 'current_ip is None, something has gone wrong'
+        else:
+            logger.info('not updating record')
+            sleep(30)
 
 # read config
-
 with open ('./dns_update.yaml', 'r', encoding = 'utf-8') as file:
-    config = yaml.safe_load(file) 
+    config = yaml.safe_load(file)
 
 log_level = config['log']['level']
-log_path= config['log']['path']
-token = config['api_token']
-zone_name = config['zone_name']
-domain_name = config['domain_name']
-dns_url = config['base_url']
 
 # create logger
-logging.basicConfig(filename=log_path, format='%(asctime)s %(message)s',filemode='a')
+logging.basicConfig(filename=config['log']['path'], format='%(asctime)s %(message)s', filemode='a')
 logger = logging.getLogger()
 if log_level.lower() == 'debug':
     logger.setLevel(logging.DEBUG)
@@ -63,29 +81,7 @@ elif log_level.lower() == 'info':
 else:
     raise ValueError('Invalid Log Level')
 
-
 # run main code
-logger.info('starting')
-
-dns_headers = {'Authorization': f'Bearer {token}'}
-
-zone = get_object_id(dns_url, dns_headers, zone_name)
-
-dns_url += f'{zone}/dns_records/' 
-record = get_object_id(dns_url, dns_headers, domain_name)
-
-dns_url += f'{record}' 
-
-current_ip = None
-
-while True:
-    ip = get_ip()
-
-    if current_ip != ip:
-        update_dns(dns_url, dns_headers, ip)
-        current_ip = ip
-    else:
-        logger.debug('no need to update')
-
-    sleep(30)
-
+if __name__ == '__main__':
+    logger.info('starting')
+    run( config['zone_name'], config['domain_name'], config['api_url'], config['api_token'] )
